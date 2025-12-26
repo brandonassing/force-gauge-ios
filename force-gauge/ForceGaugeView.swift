@@ -6,10 +6,19 @@
 //
 
 import SwiftUI
+import Charts
+
+struct DataPoint: Identifiable {
+    let id = UUID()
+    let timeOffset: TimeInterval // Time in seconds since start
+    let value: Double
+}
 
 struct ForceGaugeView: View {
     @ObservedObject var bluetoothManager: BluetoothManager
     @State private var selectedUnit: Unit = .lbs
+    @State private var dataPoints: [DataPoint] = []
+    @State private var startTime: Date = Date()
     
     enum Unit: String, CaseIterable {
         case lbs = "lbs"
@@ -18,6 +27,9 @@ struct ForceGaugeView: View {
     
     // Conversion constant: 1 lb = 0.453592 kg
     private let lbsToKgs: Double = 0.453592
+    
+    // Maximum number of data points to keep in the graph
+    private let maxDataPoints = 200
     
     var body: some View {
         VStack(spacing: 20) {
@@ -30,6 +42,9 @@ struct ForceGaugeView: View {
             // Force Value Display
             forceValueView
             
+            // Graph View
+            graphView
+            
             // Control Buttons
             controlButtonsView
             
@@ -40,6 +55,15 @@ struct ForceGaugeView: View {
         }
         .padding()
         .navigationTitle("Force Gauge")
+        .onChange(of: displayForceValue) { oldValue, newValue in
+            addDataPoint(newValue)
+        }
+        .onChange(of: bluetoothManager.isConnected) { oldValue, newValue in
+            if newValue {
+                // Reset graph when connecting
+                resetGraph()
+            }
+        }
         .alert("Error", isPresented: .constant(bluetoothManager.errorMessage != nil)) {
             Button("OK") {
                 bluetoothManager.errorMessage = nil
@@ -130,6 +154,7 @@ struct ForceGaugeView: View {
             // Tare Button
             Button(action: {
                 bluetoothManager.tare()
+                resetGraph()
             }) {
                 Label("Tare", systemImage: "arrow.counterclockwise")
                     .frame(maxWidth: .infinity)
@@ -142,6 +167,7 @@ struct ForceGaugeView: View {
             // Reset Max Button
             Button(action: {
                 bluetoothManager.resetMax()
+                resetGraph()
             }) {
                 Label("Reset Max", systemImage: "arrow.clockwise")
                     .frame(maxWidth: .infinity)
@@ -164,6 +190,70 @@ struct ForceGaugeView: View {
                 .foregroundColor(.white)
                 .cornerRadius(10)
         }
+    }
+    
+    private var graphView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Force Over Time")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            Chart {
+                ForEach(dataPoints) { point in
+                    LineMark(
+                        x: .value("Time (s)", point.timeOffset),
+                        y: .value("Force", point.value)
+                    )
+                    .foregroundStyle(.blue)
+                    .interpolationMethod(.catmullRom)
+                }
+            }
+            .frame(height: 200)
+            .chartXAxis {
+                AxisMarks { value in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let doubleValue = value.as(Double.self) {
+                            Text(String(format: "%.0f", doubleValue))
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading) { value in
+                    AxisGridLine()
+                    AxisValueLabel {
+                        if let doubleValue = value.as(Double.self) {
+                            Text(String(format: "%.1f", doubleValue))
+                        }
+                    }
+                }
+            }
+            .chartYAxisLabel(selectedUnit.rawValue)
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
+        }
+    }
+    
+    private func addDataPoint(_ value: Double) {
+        // Only graph when force is >= 1 in the selected unit
+        guard abs(value) >= 1.0 else { return }
+        
+        let timeOffset = Date().timeIntervalSince(startTime)
+        let newPoint = DataPoint(timeOffset: timeOffset, value: value)
+        
+        // Remove old points if we exceed the maximum
+        if dataPoints.count >= maxDataPoints {
+            dataPoints.removeFirst()
+        }
+        
+        dataPoints.append(newPoint)
+    }
+    
+    private func resetGraph() {
+        dataPoints = []
+        startTime = Date()
     }
     
     // Computed properties for displaying converted values
