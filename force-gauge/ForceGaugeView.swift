@@ -54,7 +54,6 @@ struct ForceGaugeView: View {
             Spacer()
         }
         .padding()
-        .navigationTitle("Force Gauge")
         .onChange(of: displayForceValue) { oldValue, newValue in
             addDataPoint(newValue)
         }
@@ -238,7 +237,7 @@ struct ForceGaugeView: View {
     
     private func addDataPoint(_ value: Double) {
         // Only graph when force is >= 1 in the selected unit
-        guard abs(value) >= 1.0 else { return }
+        guard value >= 1.0 else { return }
         
         let timeOffset = Date().timeIntervalSince(startTime)
         let newPoint = DataPoint(timeOffset: timeOffset, value: value)
