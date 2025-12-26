@@ -8,14 +8,16 @@
 import SwiftUI
 
 struct ContentView: View {
+    @StateObject private var bluetoothManager = BluetoothManager()
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        NavigationView {
+            if bluetoothManager.isConnected {
+                ForceGaugeView(bluetoothManager: bluetoothManager)
+            } else {
+                PairingView(bluetoothManager: bluetoothManager)
+            }
         }
-        .padding()
     }
 }
 
